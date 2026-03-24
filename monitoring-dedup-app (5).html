@@ -1,0 +1,1386 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>모니터링 데이터 중복 제거</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f7f7f5;--bg3:#f0efe9;
+  --text:#1a1a1a;--text2:#666;--text3:#999;
+  --border:#e0e0d8;--border2:#c8c8c0;
+  --radius:10px;--radius-sm:7px;
+  --blue-bg:#e6f1fb;--blue-text:#185fa5;
+  --green-bg:#eaf3de;--green-text:#3b6d11;
+  --red-bg:#fcebeb;--red-text:#a32d2d;
+  --amber-bg:#faeeda;--amber-text:#854f0b;
+}
+@media (prefers-color-scheme:dark){
+  :root{
+    --bg:#1e1e1c;--bg2:#282824;--bg3:#323230;
+    --text:#f0efe9;--text2:#aaa;--text3:#777;
+    --border:#3a3a36;--border2:#505048;
+    --blue-bg:#0c447c;--blue-text:#b5d4f4;
+    --green-bg:#27500a;--green-text:#c0dd97;
+    --red-bg:#791f1f;--red-text:#f7c1c1;
+    --amber-bg:#633806;--amber-text:#fac775;
+  }
+}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans KR',sans-serif;font-size:14px;color:var(--text);background:var(--bg3);min-height:100vh}
+.app{max-width:980px;margin:0 auto;padding:2rem 1rem}
+.header{margin-bottom:2rem}
+.header h1{font-size:22px;font-weight:600;margin-bottom:6px}
+.header p{font-size:13px;color:var(--text2)}
+.tabs{display:flex;gap:4px;border-bottom:1px solid var(--border);margin-bottom:1.5rem;flex-wrap:wrap}
+.tab{padding:9px 16px;font-size:13px;cursor:pointer;border:none;background:none;color:var(--text2);border-bottom:2px solid transparent;margin-bottom:-1px;font-weight:500}
+.tab.active{color:var(--text);border-bottom:2px solid var(--text)}
+.tab:hover:not(.active){color:var(--text)}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:1.25rem;margin-bottom:1rem}
+.card h2{font-size:15px;font-weight:600;margin-bottom:1rem}
+.upload-zone{border:1.5px dashed var(--border2);border-radius:var(--radius-sm);padding:1.25rem;text-align:center;cursor:pointer;transition:background 0.15s}
+.upload-zone:hover{background:var(--bg2)}
+.upload-zone.has-file{border-style:solid;border-color:var(--blue-text)}
+.upload-icon{font-size:24px;margin-bottom:6px}
+.upload-zone .filename{font-size:13px;font-weight:600;color:var(--text);margin-top:4px}
+.upload-zone p{font-size:12px;color:var(--text3);margin-top:4px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+.label{font-size:12px;color:var(--text2);margin-bottom:5px;font-weight:500}
+select,input[type=text]{width:100%;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:var(--radius-sm);background:var(--bg);color:var(--text);outline:none}
+select:focus,input:focus{border-color:var(--blue-text)}
+.btn{padding:8px 18px;font-size:13px;border:1px solid var(--border2);border-radius:var(--radius-sm);cursor:pointer;background:var(--bg);color:var(--text);font-weight:500;transition:background 0.12s}
+.btn:hover{background:var(--bg2)}
+.btn.primary{background:var(--text);color:var(--bg);border-color:var(--text)}
+.btn.primary:hover{opacity:0.85}
+.btn.danger{border-color:var(--red-text);color:var(--red-text)}
+.btn.danger:hover{background:var(--red-bg)}
+.btn:disabled{opacity:0.35;cursor:not-allowed}
+.btn-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+.badge.dup{background:var(--red-bg);color:var(--red-text)}
+.badge.ok{background:var(--green-bg);color:var(--green-text)}
+.badge.info{background:var(--blue-bg);color:var(--blue-text)}
+.result-bar{background:var(--bg2);border-radius:var(--radius-sm);padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.stats{display:flex;gap:20px;flex-wrap:wrap}
+.stat{font-size:12px;color:var(--text2)}
+.stat span{font-weight:600;color:var(--text)}
+.stat span.red{color:var(--red-text)}
+.stat span.green{color:var(--green-text)}
+.stat span.blue{color:var(--blue-text)}
+.table-wrap{overflow-x:auto;max-height:400px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--radius-sm)}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{font-weight:600;font-size:11px;color:var(--text2);text-align:left;padding:7px 10px;border-bottom:1px solid var(--border);background:var(--bg2);position:sticky;top:0;white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--border);max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+tr.dup-row{background:var(--red-bg)}
+tr.dup-row td{color:var(--red-text)}
+.confirm-wrap{display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--amber-bg);border-radius:var(--radius-sm);font-size:13px;color:var(--amber-text);margin-bottom:12px}
+.confirm-wrap input[type=checkbox]{width:15px;height:15px;cursor:pointer}
+.empty{text-align:center;padding:2.5rem;color:var(--text3);font-size:13px}
+.divider{height:1px;background:var(--border);margin:1rem 0}
+.toast{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 22px;border-radius:var(--radius);font-size:13px;z-index:9999;pointer-events:none;opacity:0;transition:opacity 0.2s}
+.toast.show{opacity:1}
+@media(max-width:600px){.grid2,.grid3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="header">
+    <h1>📊 모니터링 데이터 중복 제거</h1>
+    <p>엑셀 파일을 업로드해서 중복 탐지, 비교, 공고번호 추출을 처리하세요 — 데이터는 브라우저 내에서만 처리되며 서버로 전송되지 않습니다.</p>
+  </div>
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('compare')">① 시트 간 중복 비교</button>
+    <button class="tab" onclick="switchTab('inner')">② 리스트 내부 중복</button>
+    <button class="tab" onclick="switchTab('notice')">③ 공고번호 추출</button>
+    <button class="tab" onclick="switchTab('full')">④ 전체 행 완전 일치</button>
+    <button class="tab" onclick="switchTab('group')">⑤ 동일 이벤트 그룹핑 ✦</button>
+  </div>
+
+  <!-- TAB 1: 시트 간 비교 -->
+  <div id="tab-compare">
+    <div class="card">
+      <h2>파일 업로드</h2>
+      <div class="grid2">
+        <div>
+          <div class="label">Sheet1 — 필터링X / 원본 (중복 제거 대상)</div>
+          <div class="upload-zone" id="zone1" onclick="document.getElementById('file1').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name1">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file1" style="display:none" accept=".xlsx,.csv" onchange="loadFile(1,this)">
+          <div style="margin-top:8px">
+            <div class="label">시트 선택</div>
+            <select id="sheet1-sel" onchange="selectSheet(1)"><option>— 파일 업로드 후 선택 —</option></select>
+          </div>
+        </div>
+        <div>
+          <div class="label">Sheet2 — 필터링O / 기준 (이 값들을 Sheet1에서 제거)</div>
+          <div class="upload-zone" id="zone2" onclick="document.getElementById('file2').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name2">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file2" style="display:none" accept=".xlsx,.csv" onchange="loadFile(2,this)">
+          <div style="margin-top:8px">
+            <div class="label">시트 선택</div>
+            <select id="sheet2-sel" onchange="selectSheet(2)"><option>— 파일 업로드 후 선택 —</option></select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>비교 설정</h2>
+      <div class="grid2" style="margin-bottom:12px">
+        <div>
+          <div class="label">Sheet1 비교 기준 열 <span style="font-weight:400;color:var(--text3)">(중복 탐지 대상)</span></div>
+          <div style="display:flex;gap:6px">
+            <select id="col-key1" onchange="toggleCustomCol()" style="flex:1">
+              <option value="A">A열</option><option value="B">B열</option>
+              <option value="C">C열</option><option value="D">D열</option>
+              <option value="E">E열</option><option value="F">F열</option>
+              <option value="G">G열</option><option value="H">H열</option>
+              <option value="I">I열</option><option value="J">J열</option>
+              <option value="K">K열</option><option value="L">L열</option>
+              <option value="M">M열</option><option value="N">N열</option>
+              <option value="O">O열</option><option value="P">P열</option>
+              <option value="Q">Q열</option><option value="R">R열</option>
+              <option value="S">S열</option><option value="T">T열</option>
+              <option value="U">U열</option><option value="V">V열</option>
+              <option value="W" selected>W열</option><option value="X">X열</option>
+              <option value="Y">Y열</option><option value="Z">Z열</option>
+              <option value="custom1">직접 입력</option>
+            </select>
+            <input type="text" id="col-custom1" placeholder="예: AA" maxlength="3" style="width:70px;display:none">
+          </div>
+        </div>
+        <div>
+          <div class="label">Sheet2 비교 기준 열 <span style="font-weight:400;color:var(--text3)">(이 값들을 Sheet1에서 제거)</span></div>
+          <div style="display:flex;gap:6px">
+            <select id="col-key2" onchange="toggleCustomCol()" style="flex:1">
+              <option value="A">A열</option><option value="B">B열</option>
+              <option value="C">C열</option><option value="D">D열</option>
+              <option value="E">E열</option><option value="F">F열</option>
+              <option value="G">G열</option><option value="H">H열</option>
+              <option value="I">I열</option><option value="J">J열</option>
+              <option value="K">K열</option><option value="L">L열</option>
+              <option value="M">M열</option><option value="N">N열</option>
+              <option value="O">O열</option><option value="P">P열</option>
+              <option value="Q">Q열</option><option value="R">R열</option>
+              <option value="S">S열</option><option value="T">T열</option>
+              <option value="U">U열</option><option value="V">V열</option>
+              <option value="W" selected>W열</option><option value="X">X열</option>
+              <option value="Y">Y열</option><option value="Z">Z열</option>
+              <option value="custom2">직접 입력</option>
+            </select>
+            <input type="text" id="col-custom2" placeholder="예: AA" maxlength="3" style="width:70px;display:none">
+          </div>
+        </div>
+      </div>
+      <div>
+        <div class="label">텍스트 정제 옵션</div>
+        <select id="trim-opt" style="max-width:360px">
+          <option value="1">공백/숨은문자 제거 후 비교 (권장)</option>
+          <option value="0">원본 그대로 비교</option>
+        </select>
+      </div>
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="runCompare()">🔍 중복 탐지 실행</button>
+        <button class="btn" onclick="resetAll()">초기화</button>
+      </div>
+    </div>
+
+    <div id="compare-result" style="display:none">
+      <div class="card">
+        <h2>탐지 결과 미리보기</h2>
+        <div id="result-stats" class="result-bar"></div>
+        <div id="confirm-check-wrap" class="confirm-wrap" style="display:none">
+          <input type="checkbox" id="confirm-del" onchange="toggleConfirm()">
+          <label for="confirm-del">미리보기를 확인했습니다. 체크된 중복 행을 삭제합니다.</label>
+        </div>
+        <div class="btn-row">
+          <button class="btn danger" id="btn-del" onclick="confirmDelete()" disabled>✂ 선택 삭제 확정</button>
+          <button class="btn primary" onclick="downloadResult()">⬇ 결과 다운로드 (.xlsx)</button>
+          <button class="btn" onclick="toggleAll()">전체 선택/해제</button>
+        </div>
+        <div class="table-wrap" id="preview-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 2: 내부 중복 -->
+  <div id="tab-inner" style="display:none">
+    <div class="card">
+      <h2>리스트 내부 중복 제거</h2>
+      <div class="grid2">
+        <div>
+          <div class="label">파일 업로드</div>
+          <div class="upload-zone" onclick="document.getElementById('file-inner').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name-inner">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file-inner" style="display:none" accept=".xlsx,.csv" onchange="loadInner(this)">
+          <div style="margin-top:8px">
+            <select id="sheet-inner-sel" onchange="selectInnerSheet()"><option>— 파일 업로드 후 선택 —</option></select>
+          </div>
+        </div>
+        <div>
+          <div class="label">중복 판단 기준</div>
+          <select id="inner-mode">
+            <option value="single">단일 열 기준</option>
+            <option value="multi">여러 열 조합 기준</option>
+            <option value="all">A~Z 전체 완전 일치</option>
+          </select>
+          <div style="margin-top:10px">
+            <div class="label">기준 열 (단일: W / 복수: A,B,W 형식)</div>
+            <input type="text" id="inner-cols" placeholder="W" value="W">
+          </div>
+          <div style="margin-top:10px">
+            <div class="label">대표 행 유지 기준</div>
+            <select id="keep-mode">
+              <option value="first">처음 등장한 행 유지</option>
+              <option value="last">마지막 등장한 행 유지</option>
+            </select>
+          </div>
+          <div style="margin-top:10px">
+            <div class="label">텍스트 정제</div>
+            <select id="inner-trim">
+              <option value="1">공백/숨은문자 제거 후 비교</option>
+              <option value="0">원본 그대로</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="runInner()">🔍 내부 중복 탐지</button>
+      </div>
+    </div>
+    <div id="inner-result" style="display:none">
+      <div class="card">
+        <h2>내부 중복 결과</h2>
+        <div id="inner-stats" class="result-bar"></div>
+        <div class="btn-row">
+          <button class="btn primary" onclick="downloadInner()">⬇ 중복 제거 결과 다운로드</button>
+          <button class="btn" onclick="downloadInnerDupOnly()">⬇ 중복 건만 따로 다운로드</button>
+        </div>
+        <div class="table-wrap" id="inner-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 3: 공고번호 추출 -->
+  <div id="tab-notice" style="display:none">
+    <div class="card">
+      <h2>공고번호 자동 추출 <span style="font-size:12px;font-weight:400;color:var(--text2)">[제0000-000호] 형식</span></h2>
+      <div class="grid2">
+        <div>
+          <div class="label">파일 업로드</div>
+          <div class="upload-zone" onclick="document.getElementById('file-notice').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name-notice">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file-notice" style="display:none" accept=".xlsx,.csv" onchange="loadNotice(this)">
+          <div style="margin-top:8px">
+            <select id="sheet-notice-sel" onchange="selectNoticeSheet()"><option>— 파일 업로드 후 선택 —</option></select>
+          </div>
+        </div>
+        <div>
+          <div class="label">추출 대상 열</div>
+          <select id="notice-col" onchange="toggleNoticeCustom()">
+            <option value="R">R열 (기본값)</option>
+            <option value="W">W열</option>
+            <option value="A">A열</option><option value="B">B열</option>
+            <option value="custom">직접 입력</option>
+          </select>
+          <div id="notice-custom-wrap" style="margin-top:8px;display:none">
+            <input type="text" id="notice-col-custom" placeholder="열 이름 (예: S)" maxlength="3">
+          </div>
+          <div style="margin-top:12px">
+            <div class="label">추출 패턴</div>
+            <select id="notice-pattern">
+              <option value="bracket">[제xxxx-xxx호] 형식만 (대괄호 포함)</option>
+              <option value="both">[제xxxx-xxx호] + 제xxxx-xxx호 모두</option>
+            </select>
+          </div>
+          <div style="margin-top:12px">
+            <div class="label">추출 결과 열 이름</div>
+            <input type="text" id="notice-newcol" value="추출_공고번호" placeholder="새 열 이름">
+          </div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="runNotice()">🔍 공고번호 추출 실행</button>
+      </div>
+    </div>
+    <div id="notice-result" style="display:none">
+      <div class="card">
+        <h2>추출 결과</h2>
+        <div id="notice-stats" class="result-bar"></div>
+        <div class="btn-row">
+          <button class="btn primary" onclick="downloadNotice()">⬇ 전체 결과 다운로드</button>
+          <button class="btn" onclick="downloadNoticeFoundOnly()">⬇ 추출 성공 건만 다운로드</button>
+        </div>
+        <div class="table-wrap" id="notice-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 4: 전체 행 완전 일치 -->
+  <div id="tab-full" style="display:none">
+    <div class="card">
+      <h2>전체 행(A~Z) 완전 일치 비교</h2>
+      <div class="grid2">
+        <div>
+          <div class="label">Sheet1</div>
+          <div class="upload-zone" onclick="document.getElementById('file-full1').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name-full1">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file-full1" style="display:none" accept=".xlsx,.csv" onchange="loadFull(1,this)">
+          <div style="margin-top:8px"><select id="sheet-full1-sel" onchange="selectFullSheet(1)"><option>— 파일 업로드 후 선택 —</option></select></div>
+        </div>
+        <div>
+          <div class="label">Sheet2 (같은 파일의 다른 시트도 가능)</div>
+          <div class="upload-zone" onclick="document.getElementById('file-full2').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name-full2">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file-full2" style="display:none" accept=".xlsx,.csv" onchange="loadFull(2,this)">
+          <div style="margin-top:8px"><select id="sheet-full2-sel" onchange="selectFullSheet(2)"><option>— 파일 업로드 후 선택 —</option></select></div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="runFull()">🔍 완전 일치 탐지</button>
+      </div>
+    </div>
+    <div id="full-result" style="display:none">
+      <div class="card">
+        <h2>완전 일치 결과</h2>
+        <div id="full-stats" class="result-bar"></div>
+        <div class="btn-row">
+          <button class="btn primary" onclick="downloadFull()">⬇ 결과 다운로드</button>
+        </div>
+        <div class="table-wrap" id="full-table"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB 5: 동일 이벤트 그룹핑 -->
+  <div id="tab-group" style="display:none">
+    <div class="card">
+      <h2>동일 이벤트 그룹핑</h2>
+      <p style="font-size:12px;color:var(--text2);margin-bottom:1rem;line-height:1.6">전자관보·입법예고·부처 홈페이지 등 여러 소스의 동일 legal event를 자동으로 묶습니다.<br>
+      <strong style="color:var(--text)">아래 3가지 기준을 동시에 적용합니다</strong> — ① 키워드/제목 내 공고번호 일치 &nbsp;② 본문(content_kr) 내 ⊙공고번호 일치 &nbsp;③ 법령명+법령번호 일치 (파이프 구분 형태) &nbsp;④ 제목 정규화 유사도</p>
+      <div class="grid2">
+        <div>
+          <div class="label">파일 업로드</div>
+          <div class="upload-zone" onclick="document.getElementById('file-group').click()">
+            <div class="upload-icon">📂</div>
+            <div class="filename" id="name-group">클릭하여 파일 선택</div>
+            <p>.xlsx · .csv 지원</p>
+          </div>
+          <input type="file" id="file-group" style="display:none" accept=".xlsx,.csv" onchange="loadGroup(this)">
+          <div style="margin-top:8px">
+            <select id="sheet-group-sel" onchange="selectGroupSheet()"><option>— 파일 업로드 후 선택 —</option></select>
+          </div>
+        </div>
+        <div>
+          <div class="label">열 위치 설정 <span style="font-weight:400;color:var(--text3)">(실제 데이터 열 알파벳 입력)</span></div>
+          <div style="display:grid;grid-template-columns:140px 1fr;align-items:center;gap:8px 10px">
+            <span style="font-size:12px;color:var(--text2)">키워드/제목 열</span>
+            <input type="text" id="g-col-kw" value="W" placeholder="예: W" maxlength="3" style="width:64px">
+            <span style="font-size:12px;color:var(--text2)">본문(content_kr) 열</span>
+            <input type="text" id="g-col-body" value="R" placeholder="예: R" maxlength="3" style="width:64px">
+            <span style="font-size:12px;color:var(--text2)">소스/출처 열</span>
+            <input type="text" id="g-col-src" value="A" placeholder="예: A" maxlength="3" style="width:64px">
+          </div>
+          <div style="margin-top:14px">
+            <div class="label">제목 유사도 임계값 <span style="font-weight:400;color:var(--text3)">(낮을수록 더 많이 묶임)</span></div>
+            <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+              <input type="range" id="g-threshold" min="50" max="100" value="80" step="5" style="flex:1">
+              <span id="g-threshold-val" style="font-size:13px;font-weight:600;min-width:36px">80%</span>
+            </div>
+            <div style="font-size:11px;color:var(--text3);margin-top:3px">권장 75~85% · 번호 기준 매핑은 유사도와 무관하게 항상 적용됨</div>
+          </div>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <div class="btn-row">
+        <button class="btn primary" onclick="runGroup()">🔗 동일 이벤트 그룹핑 실행</button>
+      </div>
+    </div>
+
+    <div id="group-result" style="display:none">
+      <div class="card">
+        <h2>그룹핑 결과</h2>
+        <div id="group-stats" class="result-bar"></div>
+        <div class="btn-row">
+          <button class="btn primary" onclick="downloadGroupFlat()">⬇ 그룹ID 포함 전체 다운로드</button>
+          <button class="btn" onclick="downloadGroupRepOnly()">⬇ 대표건만 다운로드</button>
+          <button class="btn" onclick="toggleGroupView()">보기 전환 (대표/전체)</button>
+        </div>
+        <div id="group-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ─── 상태 ───
+let wb1=null,wb2=null,data1=[],data2=[];
+let wbInner=null,dataInner=[];
+let wbNotice=null,dataNotice=[];
+let wbFull1=null,wbFull2=null,dataFull1=[],dataFull2=[];
+let resultRows=[],innerResult=[],noticeResult=[],fullResult=[];
+
+// ─── 공통 유틸 ───
+function toast(msg,dur=2800){
+  const t=document.getElementById('toast');
+  t.textContent=msg;t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'),dur);
+}
+
+function switchTab(name){
+  ['compare','inner','notice','full','group'].forEach(n=>{
+    document.getElementById('tab-'+n).style.display=n===name?'block':'none';
+  });
+  document.querySelectorAll('.tab').forEach((b,i)=>{
+    const names=['compare','inner','notice','full','group'];
+    b.classList.toggle('active',names[i]===name);
+  });
+}
+
+function colIdxToName(idx){
+  let name='';idx++;
+  while(idx>0){const r=(idx-1)%26;name=String.fromCharCode(65+r)+name;idx=Math.floor((idx-1)/26);}
+  return name;
+}
+
+// cellVal: 셀 값을 문자열로 반환. 날짜 타입은 원본 w(표시값) 우선 사용
+function cellVal(cell){
+  if(!cell) return '';
+  // 날짜 셀: cell.w(포맷된 표시값)를 우선 사용
+  if(cell.t==='d'||(cell.t==='n'&&cell.w&&/\d{4}[-./]\d{2}/.test(cell.w))) return cell.w??String(cell.v??'');
+  return cell.w!==undefined?cell.w:String(cell.v??'');
+}
+
+function sheetToJson(ws){
+  if(!ws||!ws['!ref'])return[];
+  const ref=XLSX.utils.decode_range(ws['!ref']);
+  const rows=[];
+  // 첫 행을 헤더로 읽기
+  const headers=[];
+  for(let c=ref.s.c;c<=ref.e.c;c++){
+    const cell=ws[XLSX.utils.encode_cell({r:ref.s.r,c})];
+    // 헤더가 없으면 열 알파벳을 폴백으로 사용
+    headers.push(cell&&cell.v!=null?String(cell.v):colIdxToName(c));
+  }
+  // 헤더행은 rows[0]로 넣고, 데이터는 rows[1]부터
+  const headerRow={};
+  headers.forEach((h,i)=>headerRow[colIdxToName(ref.s.c+i)]=h);
+  rows.push(headerRow);
+  for(let r=ref.s.r+1;r<=ref.e.r;r++){
+    const row={};
+    for(let c=ref.s.c;c<=ref.e.c;c++){
+      const addr=XLSX.utils.encode_cell({r,c});
+      row[colIdxToName(c)]=cellVal(ws[addr]);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
+// 원본 워크북에서 특정 행만 골라 새 워크북 생성 (서식 최대한 보존)
+function buildOutputWb(srcWb, srcSheetName, keepRowIndices){
+  const srcWs=srcWb.Sheets[srcSheetName];
+  const ref=XLSX.utils.decode_range(srcWs['!ref']);
+  const outWb=XLSX.utils.book_new();
+  const outWs={};
+  let outRow=0;
+  // 헤더(0행) 항상 포함
+  for(let c=ref.s.c;c<=ref.e.c;c++){
+    const srcAddr=XLSX.utils.encode_cell({r:ref.s.r,c});
+    const dstAddr=XLSX.utils.encode_cell({r:0,c});
+    if(srcWs[srcAddr]) outWs[dstAddr]={...srcWs[srcAddr]};
+  }
+  outRow=1;
+  // 유지할 데이터 행들 (keepRowIndices는 0-based 데이터행 인덱스)
+  keepRowIndices.forEach(dataIdx=>{
+    const srcR=ref.s.r+1+dataIdx; // +1은 헤더 건너뜀
+    for(let c=ref.s.c;c<=ref.e.c;c++){
+      const srcAddr=XLSX.utils.encode_cell({r:srcR,c});
+      const dstAddr=XLSX.utils.encode_cell({r:outRow,c});
+      if(srcWs[srcAddr]) outWs[dstAddr]={...srcWs[srcAddr]};
+    }
+    outRow++;
+  });
+  outWs['!ref']=XLSX.utils.encode_range({s:{r:0,c:ref.s.c},e:{r:outRow-1,c:ref.e.c}});
+  if(srcWs['!cols']) outWs['!cols']=srcWs['!cols'];
+  XLSX.utils.book_append_sheet(outWb,outWs,'결과');
+  return outWb;
+}
+
+function cleanVal(v,doTrim){
+  if(!doTrim)return String(v??'');
+  return String(v??'').trim().replace(/\s+/g,' ').replace(/[\u00a0\u200b\ufeff\r\n]/g,'');
+}
+
+function getColKey(n){
+  const sel=document.getElementById('col-key'+n).value;
+  if(sel==='custom'+n){
+    return(document.getElementById('col-custom'+n).value.trim().toUpperCase())||'W';
+  }
+  return sel;
+}
+
+function toggleCustomCol(){
+  const v1=document.getElementById('col-key1').value;
+  const v2=document.getElementById('col-key2').value;
+  document.getElementById('col-custom1').style.display=v1==='custom1'?'block':'none';
+  document.getElementById('col-custom2').style.display=v2==='custom2'?'block':'none';
+}
+
+function toggleNoticeCustom(){
+  const show=document.getElementById('notice-col').value==='custom';
+  document.getElementById('notice-custom-wrap').style.display=show?'block':'none';
+}
+
+// ─── TAB1: 시트 간 비교 ───
+// wb1src, wb2src: 원본 워크북 (서식 보존용)
+let wb1src=null,wb1SheetName='',wb2src=null,wb2SheetName='';
+
+function loadFile(n,input){
+  const f=input.files[0];if(!f)return;
+  document.getElementById('name'+n).textContent=f.name;
+  document.getElementById('zone'+n).classList.add('has-file');
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:'array',cellDates:true,cellNF:true,cellStyles:true});
+    if(n===1){wb1=wb;wb1src=wb;wb1SheetName=wb.SheetNames[0];}
+    else{wb2=wb;wb2src=wb;wb2SheetName=wb.SheetNames[0];}
+    const sel=document.getElementById('sheet'+n+'-sel');
+    sel.innerHTML=wb.SheetNames.map((s,i)=>`<option value="${i}">${s}</option>`).join('');
+    const d=sheetToJson(wb.Sheets[wb.SheetNames[0]]);
+    if(n===1)data1=d;else data2=d;
+    toast(`${f.name} 로드 완료 (${d.length>0?d.length-1:0}행)`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function selectSheet(n){
+  const sel=document.getElementById('sheet'+n+'-sel');
+  const wb=n===1?wb1:wb2;if(!wb)return;
+  const idx=parseInt(sel.value);
+  const sheetName=wb.SheetNames[idx];
+  if(n===1)wb1SheetName=sheetName;else wb2SheetName=sheetName;
+  const d=sheetToJson(wb.Sheets[sheetName]);
+  if(n===1)data1=d;else data2=d;
+  toast(`시트 변경 완료 (${d.length>0?d.length-1:0}행)`);
+}
+
+function runCompare(){
+  if(!data1.length||!data2.length){toast('두 파일 모두 업로드해주세요');return;}
+  if(data1.length<2){toast('Sheet1에 데이터가 없습니다');return;}
+  const col1=getColKey(1);
+  const col2=getColKey(2);
+  const doTrim=document.getElementById('trim-opt').value==='1';
+  const body1=data1.slice(1);
+  const body2=data2.slice(1);
+  const set2=new Set(body2.map(r=>cleanVal(r[col2]||'',doTrim)).filter(v=>v!==''));
+  resultRows=body1.map((r,i)=>{
+    const v=cleanVal(r[col1]||'',doTrim);
+    const isDup=v!==''&&set2.has(v);
+    return{...r,__dup:isDup,__check:isDup,__key:v,__origIdx:i};
+  });
+  renderCompareResult(col1,col2);
+  document.getElementById('compare-result').style.display='block';
+  document.getElementById('compare-result').scrollIntoView({behavior:'smooth'});
+}
+
+function renderCompareResult(col1,col2){
+  const dupCount=resultRows.filter(r=>r.__dup).length;
+  col1=col1||getColKey(1);
+  col2=col2||getColKey(2);
+  document.getElementById('result-stats').innerHTML=`
+    <div class="stats">
+      <div class="stat">전체 <span>${resultRows.length}행</span></div>
+      <div class="stat">중복(제거 대상) <span class="red">${dupCount}행</span></div>
+      <div class="stat">유지 <span class="green">${resultRows.length-dupCount}행</span></div>
+      <div class="stat">Sheet1 기준 열 <span>${col1}열</span></div>
+      <div class="stat">Sheet2 기준 열 <span>${col2}열</span></div>
+    </div>`;
+  document.getElementById('confirm-check-wrap').style.display='flex';
+  document.getElementById('btn-del').disabled=true;
+  document.getElementById('confirm-del').checked=false;
+
+  const cols=Object.keys(resultRows[0]||{}).filter(k=>!k.startsWith('__'));
+  const vis=cols.slice(0,12);
+  let html=`<table><thead><tr><th><input type="checkbox" id="chk-all" onchange="toggleAll()"></th><th>상태</th><th>기준값</th>`;
+  vis.forEach(c=>{html+=`<th>${c}열</th>`;});
+  html+=`</tr></thead><tbody>`;
+  resultRows.forEach((r,i)=>{
+    const cls=r.__dup?'dup-row':'';
+    const badge=r.__dup?`<span class="badge dup">중복</span>`:`<span class="badge ok">유지</span>`;
+    html+=`<tr class="${cls}"><td><input type="checkbox" class="row-chk" data-i="${i}" ${r.__check?'checked':''}></td><td>${badge}</td><td style="max-width:140px;overflow:hidden;text-overflow:ellipsis" title="${r.__key}">${r.__key}</td>`;
+    vis.forEach(c=>{html+=`<td title="${r[c]||''}">${r[c]||''}</td>`;});
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('preview-table').innerHTML=html;
+  document.querySelectorAll('.row-chk').forEach(cb=>{
+    cb.addEventListener('change',e=>{resultRows[parseInt(e.target.dataset.i)].__check=e.target.checked;});
+  });
+}
+
+function toggleAll(){
+  const chkAll=document.getElementById('chk-all');
+  if(!chkAll)return;
+  const checked=chkAll.checked;
+  document.querySelectorAll('.row-chk').forEach(cb=>{
+    cb.checked=checked;
+    resultRows[parseInt(cb.dataset.i)].__check=checked;
+  });
+}
+
+function toggleConfirm(){
+  document.getElementById('btn-del').disabled=!document.getElementById('confirm-del').checked;
+}
+
+function confirmDelete(){
+  const toDelete=resultRows.filter(r=>r.__check);
+  if(!toDelete.length){toast('선택된 행이 없습니다');return;}
+  resultRows=resultRows.filter(r=>!r.__check);
+  renderCompareResult(getColKey(1),getColKey(2));
+  document.getElementById('confirm-check-wrap').style.display='none';
+  document.getElementById('btn-del').disabled=true;
+  toast(`${toDelete.length}행 삭제 완료. 다운로드 버튼으로 저장하세요.`);
+}
+
+function downloadResult(){
+  if(!resultRows.length){toast('결과 없음');return;}
+  // 원본 워크북이 있으면 서식 보존 방식으로 다운로드
+  if(wb1src&&wb1SheetName){
+    const keepIndices=resultRows.map(r=>r.__origIdx).filter(i=>i!=null);
+    const outWb=buildOutputWb(wb1src,wb1SheetName,keepIndices);
+    XLSX.writeFile(outWb,'sheet1_중복제거결과.xlsx');
+  }else{
+    // 폴백: 원본 없으면 기존 방식
+    const out=resultRows.map(r=>{
+      const o={};Object.keys(r).filter(k=>!k.startsWith('__')).forEach(k=>o[k]=r[k]);return o;
+    });
+    const ws=XLSX.utils.json_to_sheet(out);
+    const outWb=XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(outWb,ws,'결과');
+    XLSX.writeFile(outWb,'sheet1_중복제거결과.xlsx');
+  }
+  toast('다운로드 완료');
+}
+
+function resetAll(){
+  data1=[];data2=[];wb1=null;wb2=null;resultRows=[];
+  wb1src=null;wb1SheetName='';wb2src=null;wb2SheetName='';
+  document.getElementById('compare-result').style.display='none';
+  ['file1','file2'].forEach(id=>document.getElementById(id).value='');
+  ['name1','name2'].forEach(id=>document.getElementById(id).textContent='클릭하여 파일 선택');
+  ['zone1','zone2'].forEach(id=>document.getElementById(id).classList.remove('has-file'));
+  toast('초기화 완료');
+}
+
+// ─── TAB2: 내부 중복 ───
+function loadInner(input){
+  const f=input.files[0];if(!f)return;
+  document.getElementById('name-inner').textContent=f.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    wbInner=XLSX.read(e.target.result,{type:'array'});
+    const sel=document.getElementById('sheet-inner-sel');
+    sel.innerHTML=wbInner.SheetNames.map((s,i)=>`<option value="${i}">${s}</option>`).join('');
+    dataInner=sheetToJson(wbInner.Sheets[wbInner.SheetNames[0]]);
+    toast(`${f.name} 로드 완료 (${dataInner.length>0?dataInner.length-1:0}행)`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function selectInnerSheet(){
+  if(!wbInner)return;
+  const idx=parseInt(document.getElementById('sheet-inner-sel').value);
+  dataInner=sheetToJson(wbInner.Sheets[wbInner.SheetNames[idx]]);
+  toast(`시트 변경 (${dataInner.length>0?dataInner.length-1:0}행)`);
+}
+
+function runInner(){
+  if(!dataInner.length){toast('파일을 업로드하세요');return;}
+  if(dataInner.length<2){toast('데이터가 없습니다');return;}
+  const mode=document.getElementById('inner-mode').value;
+  const colStr=document.getElementById('inner-cols').value;
+  const keepFirst=document.getElementById('keep-mode').value==='first';
+  const doTrim=document.getElementById('inner-trim').value==='1';
+  const body=dataInner.slice(1);
+  let getKey;
+  if(mode==='all'){
+    getKey=r=>Object.keys(r).filter(k=>!k.startsWith('__')).map(k=>cleanVal(r[k],doTrim)).join('|||');
+  }else if(mode==='multi'){
+    const cols=colStr.split(',').map(c=>c.trim().toUpperCase());
+    getKey=r=>cols.map(c=>cleanVal(r[c]||'',doTrim)).join('|||');
+  }else{
+    const col=colStr.trim().toUpperCase()||'W';
+    getKey=r=>cleanVal(r[col]||'',doTrim);
+  }
+  const seen=new Map();
+  body.forEach((r,i)=>{const k=getKey(r);if(!seen.has(k))seen.set(k,[]);seen.get(k).push(i);});
+  const dupSet=new Set();
+  seen.forEach(group=>{
+    if(group.length>1){
+      const keep=keepFirst?group[0]:group[group.length-1];
+      group.forEach(i=>{if(i!==keep)dupSet.add(i);});
+    }
+  });
+  innerResult=body.map((r,i)=>({...r,__dup:dupSet.has(i),__key:getKey(r)}));
+  const dupCount=dupSet.size;
+  document.getElementById('inner-stats').innerHTML=`
+    <div class="stats">
+      <div class="stat">전체 <span>${body.length}행</span></div>
+      <div class="stat">제거 대상 <span class="red">${dupCount}행</span></div>
+      <div class="stat">유지 <span class="green">${body.length-dupCount}행</span></div>
+    </div>`;
+  const cols=Object.keys(body[0]||{}).filter(k=>!k.startsWith('__'));
+  const vis=cols.slice(0,10);
+  let html=`<table><thead><tr><th>상태</th><th>중복 키값</th>`;
+  vis.forEach(c=>{html+=`<th>${c}열</th>`;});
+  html+=`</tr></thead><tbody>`;
+  innerResult.forEach(r=>{
+    const cls=r.__dup?'dup-row':'';
+    const badge=r.__dup?`<span class="badge dup">제거</span>`:`<span class="badge ok">유지</span>`;
+    html+=`<tr class="${cls}"><td>${badge}</td><td style="max-width:160px;overflow:hidden;text-overflow:ellipsis" title="${r.__key}">${r.__key}</td>`;
+    vis.forEach(c=>{html+=`<td title="${r[c]||''}">${r[c]||''}</td>`;});
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('inner-table').innerHTML=html;
+  document.getElementById('inner-result').style.display='block';
+  document.getElementById('inner-result').scrollIntoView({behavior:'smooth'});
+}
+
+function downloadInner(){
+  const out=innerResult.filter(r=>!r.__dup).map(r=>{
+    const o={};Object.keys(r).filter(k=>!k.startsWith('__')).forEach(k=>o[k]=r[k]);return o;
+  });
+  const ws=XLSX.utils.json_to_sheet(out);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'중복제거결과');
+  XLSX.writeFile(wb,'내부중복제거결과.xlsx');
+  toast('다운로드 완료');
+}
+
+function downloadInnerDupOnly(){
+  const out=innerResult.filter(r=>r.__dup).map(r=>{
+    const o={};Object.keys(r).filter(k=>!k.startsWith('__')).forEach(k=>o[k]=r[k]);return o;
+  });
+  if(!out.length){toast('중복 건이 없습니다');return;}
+  const ws=XLSX.utils.json_to_sheet(out);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'중복건목록');
+  XLSX.writeFile(wb,'내부중복_목록.xlsx');
+  toast('다운로드 완료');
+}
+
+// ─── TAB3: 공고번호 ───
+function loadNotice(input){
+  const f=input.files[0];if(!f)return;
+  document.getElementById('name-notice').textContent=f.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    wbNotice=XLSX.read(e.target.result,{type:'array'});
+    const sel=document.getElementById('sheet-notice-sel');
+    sel.innerHTML=wbNotice.SheetNames.map((s,i)=>`<option value="${i}">${s}</option>`).join('');
+    dataNotice=sheetToJson(wbNotice.Sheets[wbNotice.SheetNames[0]]);
+    toast(`${f.name} 로드 완료 (${dataNotice.length>0?dataNotice.length-1:0}행)`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function selectNoticeSheet(){
+  if(!wbNotice)return;
+  const idx=parseInt(document.getElementById('sheet-notice-sel').value);
+  dataNotice=sheetToJson(wbNotice.Sheets[wbNotice.SheetNames[idx]]);
+  toast(`시트 변경 (${dataNotice.length>0?dataNotice.length-1:0}행)`);
+}
+
+function runNotice(){
+  if(!dataNotice.length){toast('파일을 업로드하세요');return;}
+  if(dataNotice.length<2){toast('데이터가 없습니다');return;}
+  const selCol=document.getElementById('notice-col').value;
+  const col=selCol==='custom'?(document.getElementById('notice-col-custom').value.trim().toUpperCase()||'R'):selCol;
+  const pattern=document.getElementById('notice-pattern').value;
+  const newColName=document.getElementById('notice-newcol').value.trim()||'추출_공고번호';
+  const re1=/\[제\d{4}-\d+호\]/g;
+  const re2=/제\d{4}-\d+호/g;
+  const body=dataNotice.slice(1);
+  noticeResult=body.map(r=>{
+    const src=String(r[col]||'');
+    let matches=[];
+    const m1=[...src.matchAll(re1)].map(m=>m[0]);
+    if(m1.length)matches.push(...m1);
+    if(pattern==='both'){
+      const cleaned=src.replace(re1,'');
+      const m2=[...cleaned.matchAll(re2)].map(m=>m[0]);
+      if(m2.length)matches.push(...m2.map(v=>`[${v}]`));
+    }
+    matches=[...new Set(matches)];
+    return{...r,__extracted:matches.join(', '),__src:src,__found:matches.length>0,[newColName]:matches.join(', ')};
+  });
+  const foundCount=noticeResult.filter(r=>r.__found).length;
+  document.getElementById('notice-stats').innerHTML=`
+    <div class="stats">
+      <div class="stat">전체 <span>${body.length}행</span></div>
+      <div class="stat">추출 성공 <span class="blue">${foundCount}행</span></div>
+      <div class="stat">미발견 <span>${body.length-foundCount}행</span></div>
+      <div class="stat">대상 열 <span>${col}열</span></div>
+    </div>`;
+  const cols=Object.keys(body[0]||{}).filter(k=>!k.startsWith('__'));
+  const vis=[col,...cols.filter(c=>c!==col)].slice(0,8);
+  let html=`<table><thead><tr><th>추출 공고번호</th>`;
+  vis.forEach(c=>{html+=`<th>${c}열</th>`;});
+  html+=`</tr></thead><tbody>`;
+  noticeResult.forEach(r=>{
+    const badge=r.__found?`<span class="badge info">${r.__extracted}</span>`:`<span style="color:var(--text3);font-size:12px">—</span>`;
+    html+=`<tr><td>${badge}</td>`;
+    vis.forEach(c=>{html+=`<td title="${r[c]||''}">${r[c]||''}</td>`;});
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('notice-table').innerHTML=html;
+  document.getElementById('notice-result').style.display='block';
+  document.getElementById('notice-result').scrollIntoView({behavior:'smooth'});
+}
+
+function downloadNotice(){
+  const newColName=document.getElementById('notice-newcol').value.trim()||'추출_공고번호';
+  const out=noticeResult.map(r=>{
+    const o={};
+    Object.keys(r).filter(k=>!k.startsWith('__')&&k!==newColName).forEach(k=>o[k]=r[k]);
+    o[newColName]=r.__extracted;
+    return o;
+  });
+  const ws=XLSX.utils.json_to_sheet(out);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'공고번호추출');
+  XLSX.writeFile(wb,'R열_공고번호추출결과.xlsx');
+  toast('다운로드 완료');
+}
+
+function downloadNoticeFoundOnly(){
+  const newColName=document.getElementById('notice-newcol').value.trim()||'추출_공고번호';
+  const out=noticeResult.filter(r=>r.__found).map(r=>{
+    const o={};
+    Object.keys(r).filter(k=>!k.startsWith('__')&&k!==newColName).forEach(k=>o[k]=r[k]);
+    o[newColName]=r.__extracted;
+    return o;
+  });
+  if(!out.length){toast('추출된 공고번호가 없습니다');return;}
+  const ws=XLSX.utils.json_to_sheet(out);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'추출성공');
+  XLSX.writeFile(wb,'공고번호_추출성공건.xlsx');
+  toast('다운로드 완료');
+}
+
+// ─── TAB4: 전체 행 일치 ───
+function loadFull(n,input){
+  const f=input.files[0];if(!f)return;
+  document.getElementById('name-full'+n).textContent=f.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    const wb=XLSX.read(e.target.result,{type:'array'});
+    if(n===1){wbFull1=wb;dataFull1=sheetToJson(wb.Sheets[wb.SheetNames[0]]);}
+    else{wbFull2=wb;dataFull2=sheetToJson(wb.Sheets[wb.SheetNames[0]]);}
+    const sel=document.getElementById('sheet-full'+n+'-sel');
+    sel.innerHTML=wb.SheetNames.map((s,i)=>`<option value="${i}">${s}</option>`).join('');
+    const cnt=n===1?dataFull1.length:dataFull2.length;
+    toast(`${f.name} 로드 완료 (${cnt>0?cnt-1:0}행)`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function selectFullSheet(n){
+  const wb=n===1?wbFull1:wbFull2;if(!wb)return;
+  const idx=parseInt(document.getElementById('sheet-full'+n+'-sel').value);
+  const d=sheetToJson(wb.Sheets[wb.SheetNames[idx]]);
+  if(n===1)dataFull1=d;else dataFull2=d;
+  toast(`시트 변경 (${d.length>0?d.length-1:0}행)`);
+}
+
+function runFull(){
+  if(!dataFull1.length||!dataFull2.length){toast('두 파일 모두 업로드하세요');return;}
+  if(dataFull1.length<2||dataFull2.length<2){toast('데이터가 부족합니다');return;}
+  const body1=dataFull1.slice(1);
+  const body2=dataFull2.slice(1);
+  const makeKey=r=>Object.keys(r).filter(k=>!k.startsWith('__')).map(k=>r[k]||'').join('|||');
+  const set2=new Set(body2.map(makeKey));
+  fullResult=body1.map(r=>{const k=makeKey(r);return{...r,__dup:set2.has(k)};});
+  const dupCount=fullResult.filter(r=>r.__dup).length;
+  document.getElementById('full-stats').innerHTML=`
+    <div class="stats">
+      <div class="stat">Sheet1 전체 <span>${body1.length}행</span></div>
+      <div class="stat">Sheet2와 완전 일치 <span class="red">${dupCount}행</span></div>
+      <div class="stat">고유 행 <span class="green">${body1.length-dupCount}행</span></div>
+    </div>`;
+  const cols=Object.keys(body1[0]||{}).filter(k=>!k.startsWith('__'));
+  const vis=cols.slice(0,10);
+  let html=`<table><thead><tr><th>상태</th>`;
+  vis.forEach(c=>{html+=`<th>${c}열</th>`;});
+  html+=`</tr></thead><tbody>`;
+  fullResult.forEach(r=>{
+    const cls=r.__dup?'dup-row':'';
+    const badge=r.__dup?`<span class="badge dup">완전일치</span>`:`<span class="badge ok">고유</span>`;
+    html+=`<tr class="${cls}"><td>${badge}</td>`;
+    vis.forEach(c=>{html+=`<td title="${r[c]||''}">${r[c]||''}</td>`;});
+    html+=`</tr>`;
+  });
+  html+=`</tbody></table>`;
+  document.getElementById('full-table').innerHTML=html;
+  document.getElementById('full-result').style.display='block';
+  document.getElementById('full-result').scrollIntoView({behavior:'smooth'});
+}
+
+function downloadFull(){
+  const out=fullResult.map(r=>{
+    const o={};Object.keys(r).filter(k=>!k.startsWith('__')).forEach(k=>o[k]=r[k]);
+    o['완전일치여부']=r.__dup?'중복':'고유';return o;
+  });
+  const ws=XLSX.utils.json_to_sheet(out);
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'완전일치결과');
+  XLSX.writeFile(wb,'전체행_완전일치결과.xlsx');
+  toast('다운로드 완료');
+}
+// ─── TAB5: 동일 이벤트 그룹핑 ───
+let wbGroup=null,dataGroup=[],groupResult=[],groupShowAll=true;
+
+document.addEventListener('DOMContentLoaded',()=>{
+  const slider=document.getElementById('g-threshold');
+  const val=document.getElementById('g-threshold-val');
+  if(slider&&val){slider.addEventListener('input',()=>{val.textContent=slider.value+'%';});}
+});
+
+function loadGroup(input){
+  const f=input.files[0];if(!f)return;
+  document.getElementById('name-group').textContent=f.name;
+  const reader=new FileReader();
+  reader.onload=e=>{
+    wbGroup=XLSX.read(e.target.result,{type:'array',cellDates:true,cellNF:true,cellStyles:true});
+    const sel=document.getElementById('sheet-group-sel');
+    sel.innerHTML=wbGroup.SheetNames.map((s,i)=>`<option value="${i}">${s}</option>`).join('');
+    dataGroup=sheetToJson(wbGroup.Sheets[wbGroup.SheetNames[0]]);
+    toast(`${f.name} 로드 완료 (${dataGroup.length>0?dataGroup.length-1:0}행)`);
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function selectGroupSheet(){
+  if(!wbGroup)return;
+  const idx=parseInt(document.getElementById('sheet-group-sel').value);
+  dataGroup=sheetToJson(wbGroup.Sheets[wbGroup.SheetNames[idx]]);
+  toast(`시트 변경 (${dataGroup.length>0?dataGroup.length-1:0}행)`);
+}
+
+// ── 공고번호 추출 ──
+// 처리 대상: 제2026-127호 / 법무부공고제2026-127호 / ⊙법무부공고제2026-127호
+// 법령번호도 처리: 제21489호 (연도 없이 순번만 있는 형태)
+function extractNoticeNums(text){
+  if(!text) return [];
+  const nums=new Set();
+  // 연도-순번 형태: 제2026-127호
+  const re1=/제(\d{4}-\d+)호/g;
+  let m;
+  while((m=re1.exec(text))!==null) nums.add('N:'+m[1]);
+  // 순번만 있는 법령번호 형태: 제21489호 (4자리 이상)
+  // 단, 연도-순번 형태와 겹치지 않도록 별도 처리
+  const re2=/[^-\d]제(\d{5,})호/g;
+  while((m=re2.exec(text))!==null) nums.add('L:'+m[1]);
+  return [...nums];
+}
+
+// ── 법령 | 파이프 구분 데이터에서 법령명+법령번호 키 추출 ──
+// "아동수당법 | 법률 / 일부개정 / 보건복지부 / 제21489호 / ..."
+// → "아동수당법::L:21489"
+function extractLawKey(text){
+  if(!text) return null;
+  const pipe=text.split('|');
+  if(pipe.length<2) return null;
+  const lawName=pipe[0].trim().toLowerCase();
+  const rest=pipe[1]||'';
+  const numMatch=rest.match(/제(\d{4,})호/);
+  if(!lawName||!numMatch) return null;
+  return lawName+'::'+numMatch[1];
+}
+
+// ── 제목 정제 (비교용) ──
+// 괄호 안 내용을 살리면서 노이즈 제거
+function stripNoise(t){
+  return t
+    .replace(/[「」『』【】《》\[\]]/g,' ')
+    .replace(/⊙/g,' ')
+    .replace(/[가-힣]{2,}(?:공고|부령|처령|령|청령|원령)제\d{4}-\d+호/g,' ')
+    .replace(/제\d{4}-\d+호/g,' ')
+    .replace(/제\d{5,}호/g,' ')
+    .replace(/[가-힣]{2,}공고/g,' ')
+    .replace(/\s*[/｜|]\s*/g,' ')
+    .replace(/\s+/g,' ')
+    .trim()
+    .toLowerCase();
+}
+
+// ── 제목 비교 후보 생성 ──
+// 한 행의 키워드에서 여러 형태로 비교 후보를 뽑음
+// 예) "법무부공고제2026-127호(상가건물 임대차계약서상의 확정일자...)" →
+//   후보A (괄호 안): "상가건물 임대차계약서상의 확정일자..."
+//   후보B (괄호 제거): ""  (공고번호/부처명만 남으므로 빈값)
+//   후보C (전체 정제): "상가건물 임대차계약서상의 확정일자..."
+function titleCandidates(t){
+  if(!t) return [];
+  const cands=new Set();
+  // 1) 괄호 안 내용 추출 — 4글자 이상만
+  const innerMatches=[...t.matchAll(/[（(]([^）)]{4,})[）)]/g)];
+  innerMatches.forEach(m=>{
+    const n=stripNoise(m[1].trim());
+    if(n.length>3) cands.add(n);
+  });
+  // 2) 괄호 제거 버전
+  const noBracket=stripNoise(t.replace(/[（(][^）)]*[）)]/g,' '));
+  if(noBracket.length>3) cands.add(noBracket);
+  // 3) 전체 정제 (괄호 기호만 공백으로)
+  const full=stripNoise(t.replace(/[（(）)]/g,' '));
+  if(full.length>3) cands.add(full);
+  return [...cands];
+}
+
+// ── 자카드 유사도 (어절 기준, 2글자 이상) ──
+function jaccardSim(a,b){
+  if(!a||!b) return 0;
+  const sa=new Set(a.split(' ').filter(w=>w.length>1));
+  const sb=new Set(b.split(' ').filter(w=>w.length>1));
+  if(!sa.size||!sb.size) return 0;
+  let inter=0;
+  sa.forEach(w=>{ if(sb.has(w)) inter++; });
+  return inter/(sa.size+sb.size-inter);
+}
+
+// ── 두 후보 목록 간 최대 유사도 ──
+function maxCandidateSim(candsA,candsB){
+  let best=0;
+  for(const a of candsA)
+    for(const b of candsB){
+      const s=jaccardSim(a,b);
+      if(s>best) best=s;
+    }
+  return best;
+}
+
+function runGroup(){
+  if(!dataGroup.length||dataGroup.length<2){toast('파일을 업로드하세요');return;}
+  const colKw=(document.getElementById('g-col-kw').value.trim().toUpperCase())||'W';
+  const colBody=(document.getElementById('g-col-body').value.trim().toUpperCase())||'R';
+  const colSrc=(document.getElementById('g-col-src').value.trim().toUpperCase())||'A';
+  const threshold=parseInt(document.getElementById('g-threshold').value)/100;
+
+  const body=dataGroup.slice(1);
+  const rows=body.map((r,i)=>{
+    const kwText=cleanVal(r[colKw]||'',true);
+    const bodyText=cleanVal(r[colBody]||'',true);
+    const srcText=cleanVal(r[colSrc]||'',true);
+    const nums=new Set();
+    // ① 키워드/제목에서 공고번호 추출 (항상)
+    extractNoticeNums(kwText).forEach(n=>nums.add(n));
+    // ② 본문에서도 공고번호 추출 (항상 — ⊙법무부공고제2026-127호 형태 포함)
+    extractNoticeNums(bodyText).forEach(n=>nums.add(n));
+    // ③ 법령명+법령번호 키 (아동수당법 | 제21489호 형태)
+    const lawKey=extractLawKey(kwText);
+    return{
+      __idx:i,
+      __kw:kwText,
+      __body:bodyText,
+      __src:srcText,
+      __nums:nums,
+      __lawKey:lawKey,
+      __titleCands:titleCandidates(kwText),
+      __groupId:null,
+      ...r
+    };
+  });
+
+  // Union-Find
+  const parent=rows.map((_,i)=>i);
+  function find(x){while(parent[x]!==x){parent[x]=parent[parent[x]];x=parent[x];}return x;}
+  function union(a,b){parent[find(a)]=find(b);}
+
+  // ① 공고번호 기준 (키워드+본문 모두에서 추출된 번호)
+  {
+    const numMap=new Map();
+    rows.forEach((r,i)=>{
+      r.__nums.forEach(n=>{
+        if(!numMap.has(n))numMap.set(n,[]);
+        numMap.get(n).push(i);
+      });
+    });
+    numMap.forEach(idxList=>{
+      for(let i=1;i<idxList.length;i++) union(idxList[0],idxList[i]);
+    });
+  }
+
+  // ② 법령명+법령번호 기준 (아동수당법 | 제21489호 형태)
+  {
+    const lawMap=new Map();
+    rows.forEach((r,i)=>{
+      if(!r.__lawKey) return;
+      if(!lawMap.has(r.__lawKey)) lawMap.set(r.__lawKey,[]);
+      lawMap.get(r.__lawKey).push(i);
+    });
+    lawMap.forEach(idxList=>{
+      for(let i=1;i<idxList.length;i++) union(idxList[0],idxList[i]);
+    });
+  }
+
+  // ③ 제목 유사도 기준 — 괄호 안/밖 후보 교차 비교
+  {
+    const MAX_TITLE_ROWS=2000;
+    if(rows.length>MAX_TITLE_ROWS){
+      toast(`제목 유사도: 데이터가 많아 처음 ${MAX_TITLE_ROWS}행만 적용됩니다`);
+    }
+    const limit=Math.min(rows.length,MAX_TITLE_ROWS);
+    for(let i=0;i<limit;i++){
+      if(!rows[i].__titleCands.length) continue;
+      for(let j=i+1;j<limit;j++){
+        if(find(i)===find(j)) continue;
+        if(!rows[j].__titleCands.length) continue;
+        const sim=maxCandidateSim(rows[i].__titleCands,rows[j].__titleCands);
+        if(sim>=threshold) union(i,j);
+      }
+    }
+  }
+
+  // 그룹 구성
+  const groups=new Map();
+  rows.forEach((r,i)=>{
+    const root=find(i);
+    if(!groups.has(root))groups.set(root,[]);
+    groups.get(root).push(i);
+  });
+
+  // 매핑 근거 계산: 그룹 내 각 행이 어떤 기준으로 묶였는지
+  function getMatchReason(r, groupRows){
+    const reasons=[];
+    // 공고번호 공유 여부
+    const sharedNums=new Set();
+    groupRows.forEach(g=>{ if(g!==r) g.__nums.forEach(n=>{ if(r.__nums.has(n)) sharedNums.add(n); }); });
+    if(sharedNums.size) reasons.push('공고번호: '+[...sharedNums].join(', '));
+    // 법령키 공유 여부
+    if(r.__lawKey && groupRows.some(g=>g!==r && g.__lawKey===r.__lawKey))
+      reasons.push('법령명+번호 일치');
+    return reasons.join(' · ')||'제목 유사도';
+  }
+
+  let gId=1;
+  groupResult=[];
+  const solo=[];
+  groups.forEach((members)=>{
+    if(members.length===1){
+      const r=rows[members[0]];
+      solo.push({...r,__groupId:'단독',__isRep:true,__memberCount:1,__groupNums:[...r.__nums].join(', '),__reason:''});
+    }else{
+      const gLabel=`G${String(gId).padStart(3,'0')}`;
+      const nums=new Set();
+      const groupRows=members.map(idx=>rows[idx]);
+      members.forEach(idx=>rows[idx].__nums.forEach(n=>nums.add(n)));
+      members.forEach((idx,pos)=>{
+        const r=rows[idx];
+        groupResult.push({
+          ...r,
+          __groupId:gLabel,
+          __isRep:pos===0,
+          __memberCount:members.length,
+          __groupNums:[...nums].join(', '),
+          __reason:pos===0?'':getMatchReason(r,groupRows)
+        });
+      });
+      gId++;
+    }
+  });
+  // 그룹 먼저, 단독 나중에
+  groupResult=[...groupResult,...solo];
+
+  const totalGroups=gId-1;
+  const grouped=groupResult.filter(r=>r.__groupId!=='단독');
+  const soloCount=solo.length;
+  document.getElementById('group-stats').innerHTML=`
+    <div class="stats">
+      <div class="stat">전체 <span>${body.length}행</span></div>
+      <div class="stat">그룹 수 <span class="blue">${totalGroups}개</span></div>
+      <div class="stat">그룹 내 건수 <span class="red">${grouped.length}건</span></div>
+      <div class="stat">단독(미매핑) <span>${soloCount}건</span></div>
+    </div>`;
+
+  renderGroupResult();
+  document.getElementById('group-result').style.display='block';
+  document.getElementById('group-result').scrollIntoView({behavior:'smooth'});
+}
+
+function toggleGroupView(){
+  groupShowAll=!groupShowAll;
+  renderGroupResult();
+}
+
+function renderGroupResult(){
+  const container=document.getElementById('group-list');
+  // 대표건만 보기
+  const toShow=groupShowAll?groupResult:groupResult.filter(r=>r.__isRep);
+  if(!toShow.length){container.innerHTML='<div class="empty">결과 없음</div>';return;}
+
+  // 그룹별 카드
+  const groups=new Map();
+  toShow.forEach(r=>{
+    const g=r.__groupId;
+    if(!groups.has(g))groups.set(g,[]);
+    groups.get(g).push(r);
+  });
+
+  let html='';
+  groups.forEach((members,gId)=>{
+    const isSolo=gId==='단독';
+    const rep=members[0];
+    const headerColor=isSolo?'var(--bg2)':'var(--blue-bg)';
+    const textColor=isSolo?'var(--text2)':'var(--blue-text)';
+    html+=`<div style="border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:10px;overflow:hidden">`;
+    // 그룹 헤더
+    html+=`<div style="background:${headerColor};padding:8px 12px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">`;
+    html+=`<span style="font-size:11px;font-weight:700;color:${textColor};background:${isSolo?'var(--border)':'#b5d4f4'};padding:2px 8px;border-radius:20px">${isSolo?'단독':gId}</span>`;
+    if(!isSolo){
+      html+=`<span style="font-size:12px;font-weight:600;color:var(--text)">${members.length}건 묶음</span>`;
+      if(rep.__groupNums) html+=`<span style="font-size:11px;color:var(--blue-text)">📌 공고번호: ${rep.__groupNums}</span>`;
+    }
+    html+=`</div>`;
+    // 멤버 행들
+    members.forEach((r,pos)=>{
+      const isRep=r.__isRep&&!isSolo;
+      const bg=isRep?'var(--bg)':'var(--bg2)';
+      const indent=isRep?'':'padding-left:28px';
+      html+=`<div style="background:${bg};padding:8px 12px;border-top:1px solid var(--border);${indent}">`;
+      html+=`<div style="display:flex;align-items:flex-start;gap:8px">`;
+      if(!isSolo) html+=`<span style="font-size:11px;font-weight:600;min-width:28px;color:${isRep?'var(--green-text)':'var(--text3)'}">${isRep?'대표':'└'}</span>`;
+      html+=`<div style="flex:1;min-width:0">`;
+      if(r.__src) html+=`<div style="font-size:11px;color:var(--text3);margin-bottom:2px">${r.__src}</div>`;
+      html+=`<div style="font-size:13px;color:var(--text);word-break:break-all;line-height:1.5">${r.__kw||'(제목 없음)'}</div>`;
+      const nums=[...r.__nums];
+      if(nums.length) html+=`<div style="font-size:11px;color:var(--blue-text);margin-top:3px">번호: ${nums.join(', ')}</div>`;
+      if(!r.__isRep&&r.__reason) html+=`<div style="font-size:11px;color:var(--green-text);margin-top:2px">매핑 근거: ${r.__reason}</div>`;
+      html+=`</div></div></div>`;
+    });
+    html+=`</div>`;
+  });
+  container.innerHTML=html;
+}
+
+function downloadGroupFlat(){
+  if(!groupResult.length){toast('결과 없음');return;}
+  if(!wbGroup){toast('원본 파일 정보 없음');return;}
+  const actualSheetName=wbGroup.SheetNames[parseInt(document.getElementById('sheet-group-sel').value)||0];
+
+  // 화면 순서 그대로 — groupResult의 __idx(원본 0-based 데이터행 인덱스) 배열
+  const orderedIndices=groupResult.map(r=>r.__idx);
+
+  // buildOutputWb으로 원본 서식 보존하면서 행 순서만 변경
+  const outWb=buildOutputWb(wbGroup,actualSheetName,orderedIndices);
+
+  // 앞에 그룹ID·대표여부·매핑사유 열 삽입
+  const outWs=outWb.Sheets['결과'];
+  const ref=XLSX.utils.decode_range(outWs['!ref']);
+  const totalRows=ref.e.r+1;
+  const totalCols=ref.e.c+1;
+  const nExtra=3; // 그룹ID, 대표여부, 매핑사유
+
+  // 기존 셀을 오른쪽으로 nExtra칸 밀기 (뒤에서 앞으로)
+  for(let r=totalRows-1;r>=0;r--){
+    for(let c=totalCols-1;c>=0;c--){
+      const src=XLSX.utils.encode_cell({r,c});
+      const dst=XLSX.utils.encode_cell({r,c:c+nExtra});
+      if(outWs[src]){outWs[dst]=outWs[src];delete outWs[src];}
+    }
+  }
+
+  // 헤더행 추가 열
+  ['그룹ID','대표여부','매핑사유'].forEach((h,ci)=>{
+    outWs[XLSX.utils.encode_cell({r:0,c:ci})]={v:h,t:'s'};
+  });
+
+  // 데이터행 추가 열 값 채우기 (r=1부터)
+  groupResult.forEach((row,i)=>{
+    const r=i+1;
+    const isSolo=row.__groupId==='단독';
+    outWs[XLSX.utils.encode_cell({r,c:0})]={v:row.__groupId,t:'s'};
+    outWs[XLSX.utils.encode_cell({r,c:1})]={v:isSolo?'-':(row.__isRep?'대표':'하위'),t:'s'};
+    outWs[XLSX.utils.encode_cell({r,c:2})]={v:row.__reason||'-',t:'s'};
+  });
+
+  outWs['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:totalRows-1,c:totalCols+nExtra-1}});
+  const origCols=outWs['!cols']||[];
+  outWs['!cols']=[{wch:10},{wch:8},{wch:20},...origCols];
+
+  XLSX.writeFile(outWb,'동일이벤트_그룹핑결과.xlsx');
+  toast('다운로드 완료 — 화면과 동일한 순서로 정렬됨');
+}
+
+function downloadGroupRepOnly(){
+  if(!groupResult.length){toast('결과 없음');return;}
+  if(!wbGroup){toast('원본 파일 정보 없음');return;}
+  const actualSheetName=wbGroup.SheetNames[parseInt(document.getElementById('sheet-group-sel').value)||0];
+
+  const reps=groupResult.filter(r=>r.__isRep);
+  const orderedIndices=reps.map(r=>r.__idx);
+
+  const outWb=buildOutputWb(wbGroup,actualSheetName,orderedIndices);
+  const outWs=outWb.Sheets['결과'];
+  const ref=XLSX.utils.decode_range(outWs['!ref']);
+  const totalRows=ref.e.r+1;
+  const totalCols=ref.e.c+1;
+  const nExtra=2;
+
+  for(let r=totalRows-1;r>=0;r--){
+    for(let c=totalCols-1;c>=0;c--){
+      const src=XLSX.utils.encode_cell({r,c});
+      const dst=XLSX.utils.encode_cell({r,c:c+nExtra});
+      if(outWs[src]){outWs[dst]=outWs[src];delete outWs[src];}
+    }
+  }
+
+  ['그룹ID','그룹건수'].forEach((h,ci)=>{
+    outWs[XLSX.utils.encode_cell({r:0,c:ci})]={v:h,t:'s'};
+  });
+  reps.forEach((row,i)=>{
+    const r=i+1;
+    outWs[XLSX.utils.encode_cell({r,c:0})]={v:row.__groupId,t:'s'};
+    outWs[XLSX.utils.encode_cell({r,c:1})]={v:row.__memberCount,t:'n'};
+  });
+
+  outWs['!ref']=XLSX.utils.encode_range({s:{r:0,c:0},e:{r:totalRows-1,c:totalCols+nExtra-1}});
+  outWs['!cols']=[{wch:10},{wch:8},...(outWs['!cols']||[])];
+
+  XLSX.writeFile(outWb,'동일이벤트_대표건.xlsx');
+  toast('다운로드 완료');
+}
+</script>
+</body>
+</html>
