@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>모니터링 데이터 중복 제거</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -205,7 +206,8 @@ tr.dup-row td{color:var(--red-text)}
         </div>
         <div class="btn-row">
           <button class="btn danger" id="btn-del" onclick="confirmDelete()" disabled>✂ 선택 삭제 확정</button>
-          <button class="btn primary" onclick="downloadResult()">⬇ 결과 다운로드 (.xlsx)</button>
+          <button class="btn primary" onclick="downloadResult()">⬇ 중복 제거 결과 다운로드</button>
+          <button class="btn" style="border-color:#b8860b;color:#b8860b" onclick="downloadResultHighlight()">⬇ 중복 행 노란색 표시 다운로드</button>
           <button class="btn" onclick="toggleAll()">전체 선택/해제</button>
         </div>
         <div class="table-wrap" id="preview-table"></div>
@@ -672,14 +674,12 @@ function confirmDelete(){
 
 function downloadResult(){
   if(!resultRows.length){toast('결과 없음');return;}
-  // 원본 워크북이 있으면 서식 보존 방식으로 다운로드
   if(wb1src&&wb1SheetName){
-    const keepIndices=resultRows.map(r=>r.__origIdx).filter(i=>i!=null);
+    const keepIndices=resultRows.filter(r=>!r.__dup).map(r=>r.__origIdx).filter(i=>i!=null);
     const outWb=buildOutputWb(wb1src,wb1SheetName,keepIndices);
     XLSX.writeFile(outWb,'sheet1_중복제거결과.xlsx');
   }else{
-    // 폴백: 원본 없으면 기존 방식
-    const out=resultRows.map(r=>{
+    const out=resultRows.filter(r=>!r.__dup).map(r=>{
       const o={};Object.keys(r).filter(k=>!k.startsWith('__')).forEach(k=>o[k]=r[k]);return o;
     });
     const ws=XLSX.utils.json_to_sheet(out);
@@ -687,7 +687,56 @@ function downloadResult(){
     XLSX.utils.book_append_sheet(outWb,ws,'결과');
     XLSX.writeFile(outWb,'sheet1_중복제거결과.xlsx');
   }
-  toast('다운로드 완료');
+  toast('다운로드 완료 — 중복 행 제거됨');
+}
+
+// 중복 행은 노란색, 나머지는 원본 그대로
+function downloadResultHighlight(){
+  if(!resultRows.length){toast('결과 없음');return;}
+  if(!wb1src||!wb1SheetName){toast('원본 파일을 먼저 업로드해주세요');return;}
+
+  const srcWs=wb1src.Sheets[wb1SheetName];
+  const srcRef=XLSX.utils.decode_range(srcWs['!ref']);
+  const outWb=XLSX.utils.book_new();
+  const outWs={};
+
+  // 헤더 행 복사
+  for(let c=srcRef.s.c;c<=srcRef.e.c;c++){
+    const addr=XLSX.utils.encode_cell({r:srcRef.s.r,c});
+    const dst=XLSX.utils.encode_cell({r:0,c});
+    if(srcWs[addr]) outWs[dst]={...srcWs[addr]};
+  }
+
+  // 데이터 행: 전체 행 순서 유지, 중복행만 노란색
+  const yellowFill={patternType:'solid',fgColor:{rgb:'FFFF00'}};
+  resultRows.forEach((row,outRowIdx)=>{
+    const srcDataRow=srcRef.s.r+1+(row.__origIdx??0);
+    for(let c=srcRef.s.c;c<=srcRef.e.c;c++){
+      const srcAddr=XLSX.utils.encode_cell({r:srcDataRow,c});
+      const dstAddr=XLSX.utils.encode_cell({r:outRowIdx+1,c});
+      const srcCell=srcWs[srcAddr];
+      if(row.__dup){
+        // 중복 행: 노란색 배경 적용
+        outWs[dstAddr]={
+          ...(srcCell||{v:'',t:'s'}),
+          s:{...((srcCell&&srcCell.s)||{}),fill:yellowFill}
+        };
+      } else {
+        // 일반 행: 원본 그대로
+        if(srcCell) outWs[dstAddr]={...srcCell};
+        else outWs[dstAddr]={v:'',t:'s'};
+      }
+    }
+  });
+
+  outWs['!ref']=XLSX.utils.encode_range({s:{r:0,c:srcRef.s.c},e:{r:resultRows.length,c:srcRef.e.c}});
+  if(srcWs['!cols']) outWs['!cols']=srcWs['!cols'];
+
+  XLSX.utils.book_append_sheet(outWb,outWs,'중복표시결과');
+
+  const writer=typeof XLSXStyle!=='undefined'?XLSXStyle:XLSX;
+  writer.writeFile(outWb,'sheet1_중복표시결과.xlsx');
+  toast('다운로드 완료 — 중복 행 노란색 표시됨');
 }
 
 function resetAll(){
